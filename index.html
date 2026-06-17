@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Burj Khalifa — Touch the Sky</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Inter:wght@300;400&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold:    #C9A84C;
+      --gold-lt: #E8C97A;
+      --sky:     #DCEAF6;
+      --midnight:#EEF4FA;
+      --glass:   rgba(255,255,255,0.04);
+      --border:  rgba(201,168,76,0.25);
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--sky);
+      color: #223042;
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      overflow: hidden;
+    }
+
+    /* ── CANVAS ─────────────────────────────────────────── */
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+    #canvas-wrap canvas { display: block; width: 100% !important; height: 100% !important; }
+
+    /* ── OVERLAY GRADIENT ────────────────────────────────── */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(to right, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.0) 55%),
+        linear-gradient(to top,   rgba(255,255,255,0.92)  0%, transparent 40%);
+    }
+
+    /* ── LOADING ─────────────────────────────────────────── */
+    #loader {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: var(--sky);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.4rem;
+      transition: opacity 0.8s ease;
+    }
+    #loader.hidden { opacity: 0; pointer-events: none; }
+    .loader-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.5rem;
+      color: var(--gold);
+      width: 0%;
+      margin-bottom: 0.5rem;
+    }
+    .loader-track {
+      width: 180px;
+      height: 2px;
+      background: rgba(201,168,76,0.2);
+      overflow: hidden;
+    }
+    #loader-bar {
+      width: 0%;
+      height: 100%;
+      background: var(--gold);
+      transition: width 0.2s ease;
+    }
+    #loader-pct {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      color: rgba(34,48,66,0.6);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap"></div>
+  <div id="overlay"></div>
+  <div id="loader">
+    <div class="loader-text">Loading Burj Khalifa</div>
+    <div class="loader-track"><div id="loader-bar"></div></div>
+    <div id="loader-pct">0%</div>
+  </div>
+
+<!-- Three.js + GLTFLoader via CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── Inline GLTFLoader (r128) ─────────────────────────────────────────────────
+// We load it via a script tag below since CDN doesn't ship loaders as modules
+</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  // ── Scene setup ────────────────────────────────────────────────────────────
+  const wrap = document.getElementById('canvas-wrap');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.9;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  wrap.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+
+  // Bright daytime atmosphere
+  scene.fog = new THREE.FogExp2(0xEAF3FB, 0.0009);
+
+  const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.1, 5000);
+  camera.position.set(80, 60, 200);
+
+  // ── Controls ───────────────────────────────────────────────────────────────
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.enableZoom = true;
+  controls.enablePan = true;
+  controls.enableRotate = true;
+  controls.screenSpacePanning = true;
+  controls.minDistance = 20;
+  controls.maxDistance = 1200;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+  controls.autoRotate = false;
+  controls.target.set(0, 30, 0);
+  controls.update();
+
+  // ── Lighting ───────────────────────────────────────────────────────────────
+  // Ambient — bright daylight fill
+  const ambient = new THREE.AmbientLight(0xFFFFFF, 2.2);
+  scene.add(ambient);
+
+  // Main key light — clear sunlit fill
+  const keyLight = new THREE.DirectionalLight(0xFFF6E8, 4.0);
+  keyLight.position.set(220, 360, 180);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.camera.near = 10;
+  keyLight.shadow.camera.far = 800;
+  keyLight.shadow.camera.left = -300;
+  keyLight.shadow.camera.right = 300;
+  keyLight.shadow.camera.top = 300;
+  keyLight.shadow.camera.bottom = -100;
+  scene.add(keyLight);
+
+  // Rim light — soft sky reflection
+  const rimLight = new THREE.DirectionalLight(0xCFE6FF, 1.5);
+  rimLight.position.set(-220, 240, -180);
+  scene.add(rimLight);
+
+  // Ground bounce — neutral fill from below
+  const bounceLight = new THREE.PointLight(0xFFFFFF, 0.85, 450);
+  bounceLight.position.set(0, -10, 0);
+  scene.add(bounceLight);
+
+  // ── Stars particle system ──────────────────────────────────────────────────
+  (function addStars() {
+    const count = 3000;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count * 3; i++) {
+      pos[i] = (Math.random() - 0.5) * 4000;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xCCDDFF,
+      size: 0.8,
+      transparent: true,
+      opacity: 0.08,
+      sizeAttenuation: true,
+    });
+    scene.add(new THREE.Points(geo, mat));
+  })();
+
+  // ── Ground plane ───────────────────────────────────────────────────────────
+  const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0xe6edf5,
+    roughness: 1.0,
+    metalness: 0.0,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -1;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  function addEnvironment(mainHeight) {
+    const env = new THREE.Group();
+    const minLow = mainHeight * 0.01;
+    const maxLow = mainHeight * 0.05;
+    const surfaceY = -0.965;
+    const roadY = -0.948;
+    const waterY = -0.94;
+
+    const envGray = new THREE.MeshStandardMaterial({ color: 0xA9A9A9, roughness: 0.9, metalness: 0.0 });
+    const mats = {
+      base: envGray,
+      plaza: envGray,
+      road: envGray,
+      roadLine: envGray,
+      water: envGray,
+      waterDeep: envGray,
+      roof: envGray,
+      glass: envGray,
+      treeTrunk: envGray,
+      treeTop: envGray,
+      curb: envGray,
+    };
+
+    function freeze(mesh) {
+      mesh.updateMatrix();
+      mesh.matrixAutoUpdate = false;
+      return mesh;
+    }
+
+    function addPlane(width, depth, x, z, y, mat, rotY) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = rotY || 0;
+      mesh.position.set(x, y, z);
+      mesh.receiveShadow = true;
+      freeze(mesh);
+      env.add(mesh);
+      return mesh;
+    }
+
+    function addOval(width, depth, x, z, y, mat, rotY) {
+      const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 64), mat);
+      mesh.scale.set(width * 0.5, depth * 0.5, 1);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = rotY || 0;
+      mesh.position.set(x, y, z);
+      mesh.receiveShadow = true;
+      freeze(mesh);
+      env.add(mesh);
+      return mesh;
+    }
+
+    function addBlock(x, z, w, d, h, mat) {
+      const height = Math.max(minLow, Math.min(h, maxLow));
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), mat);
+      mesh.position.set(x, -1 + height * 0.5, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      freeze(mesh);
+      env.add(mesh);
+      return mesh;
+    }
+
+    function addTree(x, z, height, radius) {
+      const h = Math.max(minLow, Math.min(height, maxLow));
+      const trunkH = h * 0.42;
+      const crownH = h * 0.58;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.22, radius * 0.28, trunkH, 8), mats.treeTrunk);
+      trunk.position.set(x, -1 + trunkH * 0.5, z);
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      freeze(trunk);
+      env.add(trunk);
+
+      const crown = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), mats.treeTop);
+      crown.scale.y = crownH / (radius * 2);
+      crown.position.set(x, -1 + trunkH + crownH * 0.5, z);
+      crown.castShadow = true;
+      crown.receiveShadow = true;
+      freeze(crown);
+      env.add(crown);
+    }
+
+    addPlane(1000, 1000, 0, 0, surfaceY, mats.base);
+
+    addPlane(1080, 38, 0, -260, roadY, mats.road, 0.16);
+    addPlane(1050, 34, 0, 230, roadY, mats.road, -0.1);
+    addPlane(34, 960, -310, -10, roadY, mats.road, -0.12);
+    addPlane(30, 850, 315, 35, roadY, mats.road, 0.15);
+    addPlane(760, 22, -35, 45, roadY + 0.002, mats.road, -0.48);
+    addPlane(650, 20, 45, -80, roadY + 0.002, mats.road, 0.46);
+    addPlane(210, 4, -130, -22, roadY + 0.006, mats.roadLine, 0.1);
+    addPlane(260, 4, 185, 125, roadY + 0.006, mats.roadLine, -0.35);
+    addPlane(230, 4, -270, 175, roadY + 0.006, mats.roadLine, -0.1);
+
+    addOval(250, 98, 35, -112, waterY, mats.water, -0.18);
+    addOval(210, 70, -120, -145, waterY + 0.002, mats.water, 0.28);
+    addOval(165, 58, 182, -62, waterY + 0.003, mats.water, 0.46);
+    addOval(120, 42, -30, -215, waterY + 0.004, mats.waterDeep, -0.3);
+    addOval(72, 72, 15, -88, waterY + 0.006, mats.waterDeep, 0);
+
+    addOval(132, 132, 0, -4, surfaceY + 0.012, mats.plaza, 0);
+    addOval(82, 82, 0, -4, surfaceY + 0.018, mats.curb, 0);
+    addOval(34, 34, 0, -4, waterY + 0.012, mats.waterDeep, 0);
+    addPlane(22, 190, -68, -12, surfaceY + 0.014, mats.plaza, -0.28);
+    addPlane(20, 190, 76, -8, surfaceY + 0.014, mats.plaza, 0.3);
+    addPlane(210, 18, 0, 65, surfaceY + 0.014, mats.plaza, 0.04);
+
+    const blockSpecs = [
+      [-230, -175, 35, 48, 9.6], [-275, -95, 46, 32, 7.8], [-220, 70, 58, 38, 8.7],
+      [-360, 120, 66, 28, 6.2], [-355, -210, 48, 44, 6.9], [-145, 195, 40, 56, 9.2],
+      [165, 190, 62, 42, 8.4], [235, 110, 44, 66, 9.8], [330, -25, 54, 42, 7.5],
+      [280, -165, 72, 34, 6.6], [112, -245, 48, 58, 7.2], [-58, 238, 82, 30, 5.8],
+      [388, 190, 70, 52, 7.0], [-410, -20, 58, 64, 5.6], [420, -220, 62, 46, 6.4],
+      [-85, -300, 72, 38, 5.2], [405, 55, 42, 74, 8.2], [-435, 250, 70, 54, 6.8],
+    ];
+    blockSpecs.forEach((b, i) => {
+      addBlock(b[0], b[1], b[2], b[3], b[4], i % 3 === 0 ? mats.glass : mats.roof);
+      addPlane(b[2] * 0.72, 3, b[0], b[1], -1 + Math.min(b[4], maxLow) + 0.015, mats.curb, i * 0.6);
+    });
+
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      const r = i % 2 === 0 ? 105 : 138;
+      addTree(Math.cos(a) * r, Math.sin(a) * r - 20, 4.2 + (i % 5) * 0.45, 2.4);
+    }
+
+    for (let i = 0; i < 42; i++) {
+      const x = -430 + (i % 14) * 65;
+      const z = i < 14 ? -332 : (i < 28 ? 325 : -20 + (i - 28) * 24);
+      addTree(x, z, 3.4 + (i % 4) * 0.55, 2.0);
+    }
+
+    for (let i = 0; i < 18; i++) {
+      addOval(10 + (i % 3) * 3, 10 + (i % 2) * 4, -210 + i * 24, -130 + Math.sin(i) * 28, surfaceY + 0.02, mats.treeTop, i * 0.3);
+    }
+
+    scene.add(env);
+  }
+
+  // ── Load GLB ──────────────────────────────────────────────────────────────
+  const loader = new THREE.GLTFLoader();
+  const loaderBar = document.getElementById('loader-bar');
+  const loaderPct = document.getElementById('loader-pct');
+  const loaderEl  = document.getElementById('loader');
+
+  loader.load(
+    'burj_khalifa.glb',
+    (gltf) => {
+      const model = gltf.scene;
+
+      // Centre and scale
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const centre = new THREE.Vector3();
+      box.getCenter(centre);
+
+      // Target ~200 units tall
+      const scale = 200 / size.y;
+      model.scale.setScalar(scale);
+      model.position.set(-centre.x * scale, -box.min.y * scale, -centre.z * scale);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          // Enhance material if it exists
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => enhanceMat(m));
+            } else {
+              enhanceMat(child.material);
+            }
+          }
+        }
+      });
+
+      function enhanceMat(mat) {
+        mat.envMapIntensity = 1.0;
+        // Slightly push metalness/roughness for a polished glass look
+        if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness + 0.1, 1.0);
+      }
+
+      scene.add(model);
+
+      // Adjust camera & controls target to model height
+      const modelBox = new THREE.Box3().setFromObject(model);
+      const modelH = modelBox.max.y - modelBox.min.y;
+      addEnvironment(modelH);
+      controls.target.set(0, modelH * 0.35, 0);
+      camera.position.set(120, modelH * 0.3, 280);
+      controls.update();
+
+      // Hide loader
+      setTimeout(() => {
+        loaderEl.classList.add('hidden');
+        setTimeout(() => loaderEl.remove(), 900);
+      }, 400);
+    },
+    (xhr) => {
+      if (xhr.lengthComputable) {
+        const pct = Math.round((xhr.loaded / xhr.total) * 100);
+        loaderBar.style.width = pct + '%';
+        loaderPct.textContent = pct + '%';
+      }
+    },
+    (err) => {
+      console.error('GLB load error:', err);
+      loaderPct.textContent = 'Error loading model';
+    }
+  );
+
+  // ── Resize ────────────────────────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    camera.aspect = wrap.clientWidth / wrap.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  });
+
+  // ── Animate ───────────────────────────────────────────────────────────────
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    // Gentle pulsing bounce light
+    bounceLight.intensity = 0.3 + Math.sin(t * 0.8) * 0.1;
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+</script>
+<script>
+(function(){if(!window.chatbase||window.chatbase("getState")!=="initialized"){window.chatbase=(...arguments)=>{if(!window.chatbase.q){window.chatbase.q=[]}window.chatbase.q.push(arguments)};window.chatbase=new Proxy(window.chatbase,{get(target,prop){if(prop==="q"){return target.q}return(...args)=>target(prop,...args)}})}const onLoad=function(){const script=document.createElement("script");script.src="https://www.chatbase.co/embed.min.js";script.id="EGqIwPJilCBwsaot_TKzh";script.domain="www.chatbase.co";document.body.appendChild(script)};if(document.readyState==="complete"){onLoad()}else{window.addEventListener("load",onLoad)}})();
+</script>
+</body>
+</html>
